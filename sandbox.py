@@ -6,12 +6,12 @@ import overpass
 import geopy.distance
 import pprint
 import folium
+import overpy
 
 from pathlib import Path
 
-GPX_PATH = Path("C:/Users/davis/OneDrive/Documents/gpx-auto-poi/test.gpx")
 MIN_N_ROUTE_SPLITS = 10
-DISTANCE_THRESHOLD_KM = 10
+DISTANCE_THRESHOLD_KM = 3
 
 
 def get_num_splits(n):
@@ -89,7 +89,6 @@ def _get_poi_info(gpx):
     query = f"""(
         node["amenity"="drinking_water"]{bbox};
         way["amenity"="drinking_water"]{bbox};
-        relation["amenity"="drinking_water"]{bbox};
         )"""
 
     response = api.get(query)
@@ -97,10 +96,23 @@ def _get_poi_info(gpx):
     # Find closest split
     pois = []
     for feature in response["features"]:
-        if len(feature["geometry"]["coordinates"]) != 2:
-            continue
+        if feature["geometry"]["type"] == "LineString":
+            # In some cases when the feature is a box instead of a node,
+            # the easiest-to-use API fails to get coordinates,
+            # so we try a different API
+            feature_id = feature["id"]
+            try:
+                api2 = overpy.Overpass()
+                # So far encountered this only for way types
+                response2 = api2.query(f"way({feature_id});(._;>;);out body;")
+                qlat = float(response2.ways[0].nodes[0].lat)
+                qlon = float(response2.ways[0].nodes[0].lon)
+            except:
+                print("Failed to parse feature.")
+                continue
+        else:
+            qlon, qlat = feature["geometry"]["coordinates"]
 
-        qlon, qlat = feature["geometry"]["coordinates"]
         closest_dist = geopy.distance.Distance(10)  # km
         feature_split_idx = 0
 
@@ -111,9 +123,6 @@ def _get_poi_info(gpx):
             if dist < closest_dist:
                 closest_dist = dist
                 feature_split_idx = idx
-
-        # if closest_dist.kilometers > DISTANCE_THRESHOLD_KM:
-        #     continue
 
         min_info = closest_in_split(
             qlat,
@@ -127,7 +136,6 @@ def _get_poi_info(gpx):
 
         poi_info = {
             "feature_coords": (qlat, qlon),
-            # "Closest route lat, lon": min_info[:2],
             "distance_km": min_info[2],
         }
 
