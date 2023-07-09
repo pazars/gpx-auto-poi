@@ -167,7 +167,7 @@ def display_gpx_on_map(route_map, gpx_input):
     # Center the map on the track
     route_map.fit_bounds(route_map.get_bounds(), padding=(30, 30))
 
-    _display_pois_on_map(route_map, gpx)
+    # _display_pois_on_map(route_map, gpx)
 
     # Display start and finish location markers
     _display_start_finish(route_map, gpx)
@@ -175,7 +175,10 @@ def display_gpx_on_map(route_map, gpx_input):
     return route_map
 
 
-def _display_pois_on_map(route_map, gpx):
+def _display_pois_on_map(route_map, gpx_input):
+    # Parse input .gpx file
+    gpx = gpxpy.parse(gpx_input)
+
     pois = _get_poi_info(gpx)
 
     for poi in pois:
@@ -185,6 +188,8 @@ def _display_pois_on_map(route_map, gpx):
             icon=folium.Icon(icon="faucet-drip", prefix="fa", color="blue"),
         ).add_to(route_map)
 
+    return route_map
+
 
 instruction_md = "### Choose .GPX file"
 
@@ -193,19 +198,49 @@ gpx_input = pn.widgets.FileInput(accept=".gpx")
 route_map = folium.Map(
     location=[56.945695, 24.120704],
     zoom_start=13,
-    tiles="https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png",
-    attr='<a href="https://stadiamaps.com/">Stadia Maps</a',
+    # tiles="https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png",
+    # attr='<a href="https://stadiamaps.com/">Stadia Maps</a',
 )
 
 
-button = pn.widgets.Button(name="Find water", button_type="primary")
+# def enable_button(gpx_input):
+#     button = pn.widgets.Button(name="Find water", disabled=True)
+#     if gpx_input:
+#         button.disabled = False
+#     return button
 
-ctrl_row = pn.Row(instruction_md, gpx_input)  # , button)
+
+def test_button(button_press, route_map, gpx_input):
+    if not gpx_input:
+        return route_map
+
+    if button_press:
+        return _display_pois_on_map(route_map, gpx_input)
+    else:
+        return route_map
+
+
+button = pn.widgets.Button(name="Find water", disabled=gpx_input.value == None)
+inter_route_map = pn.bind(display_gpx_on_map, route_map, gpx_input)
+inter_route_map2 = pn.bind(test_button, button, inter_route_map, gpx_input)
+
+
+def update_button(button, gpx_input):
+    button.disabled = not gpx_input
+
+
+gpx_input.link(button, callbacks={"value": update_button})
+
+ctrl_row = pn.Row(
+    instruction_md,
+    gpx_input,
+    button,
+)
 
 
 gspec = pn.GridSpec(sizing_mode="stretch_both", min_height=800)
 
 gspec[0:2, :30] = ctrl_row
-gspec[2:50, 0:100] = pn.bind(display_gpx_on_map, route_map, gpx_input)
+gspec[2:50, 0:100] = inter_route_map2
 
 gspec.servable()
