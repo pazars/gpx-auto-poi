@@ -11,7 +11,7 @@ from pathlib import Path
 
 GPX_PATH = Path("C:/Users/davis/OneDrive/Documents/gpx-auto-poi/test.gpx")
 MIN_N_ROUTE_SPLITS = 10
-DISTANCE_THRESHOLD_KM = 5
+DISTANCE_THRESHOLD_KM = 10
 
 
 def get_num_splits(n):
@@ -86,13 +86,20 @@ def _get_poi_info(gpx):
 
     api = overpass.API()
 
-    query = f"""node["amenity"="drinking_water"]{bbox}"""
+    query = f"""(
+        node["amenity"="drinking_water"]{bbox};
+        way["amenity"="drinking_water"]{bbox};
+        relation["amenity"="drinking_water"]{bbox};
+        )"""
 
     response = api.get(query)
 
     # Find closest split
     pois = []
     for feature in response["features"]:
+        if len(feature["geometry"]["coordinates"]) != 2:
+            continue
+
         qlon, qlat = feature["geometry"]["coordinates"]
         closest_dist = geopy.distance.Distance(10)  # km
         feature_split_idx = 0
@@ -105,8 +112,8 @@ def _get_poi_info(gpx):
                 closest_dist = dist
                 feature_split_idx = idx
 
-        if closest_dist.kilometers > DISTANCE_THRESHOLD_KM:
-            continue
+        # if closest_dist.kilometers > DISTANCE_THRESHOLD_KM:
+        #     continue
 
         min_info = closest_in_split(
             qlat,
@@ -151,7 +158,15 @@ def _display_start_finish(route_map, gpx):
     ).add_to(route_map)
 
 
-def display_gpx_on_map(route_map, gpx_input):
+def display_gpx_on_map(gpx_input):
+    # Default map
+    route_map = folium.Map(
+        location=[56.945695, 24.120704],
+        zoom_start=13,
+        # tiles="https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png",
+        # attr='<a href="https://stadiamaps.com/">Stadia Maps</a',
+    )
+
     if not gpx_input:
         return route_map
 
@@ -162,12 +177,11 @@ def display_gpx_on_map(route_map, gpx_input):
     coordinates = [
         (point.latitude, point.longitude) for point in gpx.tracks[0].segments[0].points
     ]
+
     folium.PolyLine(coordinates, weight=6).add_to(route_map)
 
     # Center the map on the track
     route_map.fit_bounds(route_map.get_bounds(), padding=(30, 30))
-
-    # _display_pois_on_map(route_map, gpx)
 
     # Display start and finish location markers
     _display_start_finish(route_map, gpx)
@@ -191,56 +205,37 @@ def _display_pois_on_map(route_map, gpx_input):
     return route_map
 
 
-instruction_md = "### Choose .GPX file"
-
-gpx_input = pn.widgets.FileInput(accept=".gpx")
-
-route_map = folium.Map(
-    location=[56.945695, 24.120704],
-    zoom_start=13,
-    # tiles="https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png",
-    # attr='<a href="https://stadiamaps.com/">Stadia Maps</a',
-)
-
-
-# def enable_button(gpx_input):
-#     button = pn.widgets.Button(name="Find water", disabled=True)
-#     if gpx_input:
-#         button.disabled = False
-#     return button
-
-
-def test_button(button_press, route_map, gpx_input):
+def load_water_pois(switch, route_map, gpx_input):
     if not gpx_input:
         return route_map
 
-    if button_press:
+    if switch:
         return _display_pois_on_map(route_map, gpx_input)
     else:
-        return route_map
+        return display_gpx_on_map(gpx_input)
 
 
-button = pn.widgets.Button(name="Find water", disabled=gpx_input.value == None)
-inter_route_map = pn.bind(display_gpx_on_map, route_map, gpx_input)
-inter_route_map2 = pn.bind(test_button, button, inter_route_map, gpx_input)
+gpx_input = pn.widgets.FileInput(accept=".gpx", multiple=False)
 
+water_switch = pn.widgets.Switch(name="Water")
 
-def update_button(button, gpx_input):
-    button.disabled = not gpx_input
-
-
-gpx_input.link(button, callbacks={"value": update_button})
-
-ctrl_row = pn.Row(
-    instruction_md,
-    gpx_input,
-    button,
+ui_col = pn.Column(
+    pn.Row(
+        pn.widgets.StaticText(name="", value="Drinking water"),
+        water_switch,
+    ),
 )
 
+inter_route_map = pn.bind(display_gpx_on_map, gpx_input)
+inter_route_map2 = pn.bind(load_water_pois, water_switch, inter_route_map, gpx_input)
 
-gspec = pn.GridSpec(sizing_mode="stretch_both", min_height=800)
+gspec = pn.GridSpec(sizing_mode="stretch_both", min_height=650)
 
-gspec[0:2, :30] = ctrl_row
-gspec[2:50, 0:100] = inter_route_map2
+gspec[:2, :15] = gpx_input
+gspec[3:5, :15] = pn.widgets.StaticText(
+    name="", value="Select features on route", styles={"font-size": "medium"}
+)
+gspec[5:, :15] = ui_col
+gspec[:50, 15:100] = inter_route_map2
 
 gspec.servable()
