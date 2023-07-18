@@ -286,21 +286,6 @@ def map_handler(switch_values, route_map, gpx_input):
 
 
 gpx_input = pn.widgets.FileInput(accept=".gpx", multiple=False)
-
-water_switch = pn.widgets.Switch(name="Water")
-fuel_switch = pn.widgets.Switch(name="Water")
-
-ui_col = pn.Column(
-    pn.Row(
-        pn.widgets.StaticText(name="", value="Drinking water"),
-        water_switch,
-    ),
-    pn.Row(
-        pn.widgets.StaticText(name="", value="Fuel station"),
-        fuel_switch,
-    ),
-)
-
 switches = MultipleSwitches(name="Switches")
 
 switch_names = pn.Column(
@@ -310,13 +295,13 @@ switch_names = pn.Column(
 
 route_map = pn.bind(display_gpx_on_map, gpx_input)
 
-
 gspec = pn.GridSpec(sizing_mode="stretch_both", min_height=650)
 
 gspec[:2, :15] = gpx_input
 gspec[3:5, :15] = pn.widgets.StaticText(
     name="", value="Select features on route", styles={"font-size": "medium"}
 )
+
 gspec[5:, :10] = switch_names
 gspec[5:, 10:15] = switches
 gspec[:50, 15:100] = pn.bind(map_handler, switches, route_map, gpx_input)
