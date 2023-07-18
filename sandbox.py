@@ -17,7 +17,7 @@ DISTANCE_THRESHOLD_KM = 3
 
 
 class MultipleSwitches(pn.widgets.base.CompositeWidget):
-    num_switches = 2
+    num_switches = 3
     value = param.List(default=[False] * num_switches, item_type=bool)
 
     _composite_type = pn.Column
@@ -25,10 +25,15 @@ class MultipleSwitches(pn.widgets.base.CompositeWidget):
     def __init__(self, **params):
         self._first_switch = pn.widgets.Switch()
         self._second_switch = pn.widgets.Switch()
+        self._third_switch = pn.widgets.Switch()
 
         super().__init__(**params)
 
-        self._composite[:] = [self._first_switch, self._second_switch]
+        self._composite[:] = [
+            self._first_switch,
+            self._second_switch,
+            self._third_switch,
+        ]
 
         self._sync_widgets()
 
@@ -36,10 +41,17 @@ class MultipleSwitches(pn.widgets.base.CompositeWidget):
     def _sync_widgets(self):
         self._first_switch.value = self.value[0]
         self._second_switch.value = self.value[1]
+        self._third_switch.value = self.value[2]
 
-    @param.depends("_first_switch.value", "_second_switch.value", watch=True)
+    @param.depends(
+        "_first_switch.value", "_second_switch.value", "_third_switch.value", watch=True
+    )
     def _sync_params(self):
-        self.value = [self._first_switch.value, self._second_switch.value]
+        self.value = [
+            self._first_switch.value,
+            self._second_switch.value,
+            self._third_switch.value,
+        ]
 
 
 def get_bbox(gpx):
@@ -166,6 +178,8 @@ def display_pois_on_map(query, icon_key, route_map, gpx):
             icon = folium.Icon(icon="faucet-drip", prefix="fa", color="blue")
         elif icon_key == "fuel":
             icon = folium.Icon(icon="gas-pump", prefix="fa", color="orange")
+        elif icon_key == "store":
+            icon = folium.Icon(icon="cart-shopping", prefix="fa", color="green")
         else:
             icon = None
 
@@ -282,6 +296,15 @@ def map_handler(switch_values, route_map, gpx_input):
 
         route_map = display_pois_on_map(query, "fuel", route_map, gpx)
 
+    if switch_values[2]:
+        # Convenience store switch turned on
+        query = f"""(
+        node["shop"="convenience"]{bbox};
+        way["shop"="convenience"]{bbox};
+        )"""
+
+        route_map = display_pois_on_map(query, "store", route_map, gpx)
+
     return route_map
 
 
@@ -291,6 +314,7 @@ switches = MultipleSwitches(name="Switches")
 switch_names = pn.Column(
     pn.widgets.StaticText(name="", value="Drinking water"),
     pn.widgets.StaticText(name="", value="Fuel station"),
+    pn.widgets.StaticText(name="", value="Convenience store"),
 )
 
 route_map = pn.bind(display_gpx_on_map, gpx_input)
