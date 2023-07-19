@@ -161,3 +161,6 @@ cython_debug/
 
 # OpenStreetMap API cache
 cache
+
+# App virtual environment for testing
+venv_app
