@@ -353,6 +353,10 @@ gspec[14:16, :15] = threshold
 gspec[5:5, :15] = pn.widgets.StaticText(
     name="", value="Informācija no OpenStreetMap", styles={"font-size": "x-small"}
 )
+gspec[40:48, :15] = pn.pane.Image("./static/bmc_qr.png")
+gspec[48:49, 3:12] = pn.widgets.StaticText(
+    name="", value="Palīdzi uzturēt un attīstīt aplikāciju", styles={"font-size": "x-small"}
+)
 gspec[:50, 15:100] = pn.bind(map_handler, switches, route_map, gpx_input, threshold)
 
 gspec.servable()
