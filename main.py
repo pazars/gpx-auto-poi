@@ -9,7 +9,6 @@ import overpy
 import param
 
 MIN_N_ROUTE_SPLITS = 10
-DISTANCE_THRESHOLD_KM = 3
 
 pn.extension(notifications=True)
 
@@ -86,39 +85,18 @@ def get_num_splits(n):
     return int(np.where(unique_divs >= MIN_N_ROUTE_SPLITS, unique_divs, np.inf).min())
 
 
-# def find_closest_to_point(response, lat, lon):
-#     dists = []
-#     qlocs = []
-
-#     for feature in response["features"]:
-#         qlon, qlat = feature["geometry"]["coordinates"]
-#         # Distance between (#lat, lon)
-#         lon, lat = lons[len(lons) // 2], lats[len(lats) // 2]
-#         dists += [geopy.distance.distance((lat, lon), (qlat, qlon))]
-#         qlocs += [(qlat, qlon)]
-
-#     dists = np.array(dists)
-
-#     min_dist = np.min(dists)
-#     min_dist_idx = np.argmin(dists)
-#     min_lat, min_lon = qlocs[min_dist_idx]
-
-#     return (min_lat, min_lon, min_dist)
-
-
-def closest_in_split(flat, flon, split_lats, split_lons):
-    min_dist = DISTANCE_THRESHOLD_KM
+def closest_in_split(flat, flon, split_lats, split_lons, threshold):
     min_lat, min_lon = None, None
     # Check every third coordinate to make faster
     for n in range(0, len(split_lats), 3):
         lat, lon = split_lats[n], split_lons[n]
         dist = geopy.distance.distance((lat, lon), (flat, flon))
-        if dist.kilometers < min_dist:
-            min_dist = dist.kilometers
+        if dist.kilometers < threshold:
+            threshold = dist.kilometers
             min_lat, min_lon = lat, lon
 
     if min_lat:
-        return (min_lat, min_lon, min_dist)
+        return (min_lat, min_lon, threshold)
     return None
 
 
@@ -175,8 +153,8 @@ def display_gpx_on_map(gpx_input):
     return route_map
 
 
-def display_pois_on_map(query, icon_key, route_map, gpx):
-    pois = _get_poi_info(query, gpx)
+def display_pois_on_map(query, icon_key, route_map, gpx, threshold_slider):
+    pois = _get_poi_info(query, gpx, threshold_slider)
 
     for poi in pois:
         poi_lat, poi_lon = poi["feature_coords"]
@@ -203,7 +181,7 @@ def display_pois_on_map(query, icon_key, route_map, gpx):
     return route_map
 
 
-def _get_poi_info(query, gpx):
+def _get_poi_info(query, gpx, threshold_slider):
     # Split route into sections and get gpx bounding box coordinates
 
     lons = []
@@ -265,6 +243,7 @@ def _get_poi_info(query, gpx):
             qlon,
             split_lats[feature_split_idx],
             split_lons[feature_split_idx],
+            threshold_slider,
         )
 
         if not min_info:
@@ -280,7 +259,7 @@ def _get_poi_info(query, gpx):
     return pois
 
 
-def map_handler(switch_values, route_map, gpx_input):
+def map_handler(switch_values, route_map, gpx_input, threshold_slider):
     if not gpx_input:
         return route_map
 
@@ -291,7 +270,7 @@ def map_handler(switch_values, route_map, gpx_input):
         # No switches turned on
         return display_gpx_on_map(gpx_input)
 
-    info = pn.state.notifications.info("Loading.")
+    info = pn.state.notifications.info("Apstrādā")
     if switch_values[0]:
         # Water switch turned on
         query = f"""(
@@ -299,15 +278,16 @@ def map_handler(switch_values, route_map, gpx_input):
         way["amenity"="drinking_water"]{bbox};
         )"""
         
-        route_map = display_pois_on_map(query, "water", route_map, gpx)
+        route_map = display_pois_on_map(query, "water", route_map, gpx, threshold_slider)
 
     if switch_values[1]:
         # Fuel switch turned on
         query = f"""(
         node["amenity"="fuel"]{bbox};
+        way["amenity"="fuel"]{bbox};
         )"""
 
-        route_map = display_pois_on_map(query, "fuel", route_map, gpx)
+        route_map = display_pois_on_map(query, "fuel", route_map, gpx, threshold_slider)
 
     if switch_values[2]:
         # Convenience store switch turned on
@@ -316,7 +296,7 @@ def map_handler(switch_values, route_map, gpx_input):
         way["shop"="convenience"]{bbox};
         )"""
 
-        route_map = display_pois_on_map(query, "store", route_map, gpx)
+        route_map = display_pois_on_map(query, "store", route_map, gpx, threshold_slider)
 
     if switch_values[3]:
         # RMK huts and shelters turned on
@@ -340,7 +320,7 @@ def map_handler(switch_values, route_map, gpx_input):
         way["amenity"="shelter"]["operator"="RMK"]{bbox};
         )"""
 
-        route_map = display_pois_on_map(query, "rmk", route_map, gpx)
+        route_map = display_pois_on_map(query, "rmk", route_map, gpx, threshold_slider)
     
     info.destroy()
     return route_map
@@ -350,10 +330,10 @@ gpx_input = pn.widgets.FileInput(accept=".gpx", multiple=False)
 switches = MultipleSwitches(name="Switches")
 
 switch_names = pn.Column(
-    pn.widgets.StaticText(name="", value="Drinking water"),
-    pn.widgets.StaticText(name="", value="Fuel station"),
-    pn.widgets.StaticText(name="", value="Convenience store"),
-    pn.widgets.StaticText(name="", value="RMK huts"),
+    pn.widgets.StaticText(name="", value="Ūdens avots"),
+    pn.widgets.StaticText(name="", value="DUS"),
+    pn.widgets.StaticText(name="", value="Veikals"),
+    pn.widgets.StaticText(name="", value="RMK (Igaunija)"),
 )
 
 route_map = pn.bind(display_gpx_on_map, gpx_input)
@@ -362,11 +342,17 @@ gspec = pn.GridSpec(sizing_mode="stretch_both", min_height=650)
 
 gspec[:2, :15] = gpx_input
 gspec[3:5, :15] = pn.widgets.StaticText(
-    name="", value="Select features on route", styles={"font-size": "medium"}
+    name="", value="Maršruta punkti", styles={"font-size": "medium"}
 )
 
-gspec[5:, :10] = switch_names
-gspec[5:, 10:15] = switches
-gspec[:50, 15:100] = pn.bind(map_handler, switches, route_map, gpx_input)
+threshold = pn.widgets.IntSlider(name='Rādiuss ap maršrutu (km)', start=0, end=16, step=2, value=4)
+
+gspec[7:12, :10] = switch_names
+gspec[7:12, 10:15] = switches
+gspec[14:16, :15] = threshold
+gspec[5:5, :15] = pn.widgets.StaticText(
+    name="", value="Informācija no OpenStreetMap", styles={"font-size": "x-small"}
+)
+gspec[:50, 15:100] = pn.bind(map_handler, switches, route_map, gpx_input, threshold)
 
 gspec.servable()
