@@ -4,16 +4,14 @@ import panel as pn
 import gpxpy
 import overpass
 import geopy.distance
-import pprint
 import folium
 import overpy
-import copy
 import param
-
-from pathlib import Path
 
 MIN_N_ROUTE_SPLITS = 10
 DISTANCE_THRESHOLD_KM = 3
+
+pn.extension(notifications=True)
 
 
 class MultipleSwitches(pn.widgets.base.CompositeWidget):
@@ -31,8 +29,6 @@ class MultipleSwitches(pn.widgets.base.CompositeWidget):
         self._third_switch = pn.widgets.Switch()
         # RMK huts and shelters (Estonia)
         self._fourth_switch = pn.widgets.Switch()
-        # Placeholder
-        self._fifth_switch = pn.widgets.Switch()
 
         super().__init__(**params)
 
@@ -41,7 +37,6 @@ class MultipleSwitches(pn.widgets.base.CompositeWidget):
             self._second_switch,
             self._third_switch,
             self._fourth_switch,
-            self._fifth_switch,
         ]
 
         self._sync_widgets()
@@ -52,14 +47,12 @@ class MultipleSwitches(pn.widgets.base.CompositeWidget):
         self._second_switch.value = self.value[1]
         self._third_switch.value = self.value[2]
         self._fourth_switch.value = self.value[3]
-        self._fifth_switch.value = self.value[4]
 
     @param.depends(
         "_first_switch.value",
         "_second_switch.value",
         "_third_switch.value",
         "_fourth_switch.value",
-        "_fifth_switch.value",
         watch=True,
     )
     def _sync_params(self):
@@ -68,7 +61,6 @@ class MultipleSwitches(pn.widgets.base.CompositeWidget):
             self._second_switch.value,
             self._third_switch.value,
             self._fourth_switch.value,
-            self._fifth_switch.value,
         ]
 
 
@@ -94,24 +86,24 @@ def get_num_splits(n):
     return int(np.where(unique_divs >= MIN_N_ROUTE_SPLITS, unique_divs, np.inf).min())
 
 
-def find_closest_to_point(response, lat, lon):
-    dists = []
-    qlocs = []
+# def find_closest_to_point(response, lat, lon):
+#     dists = []
+#     qlocs = []
 
-    for feature in response["features"]:
-        qlon, qlat = feature["geometry"]["coordinates"]
-        # Distance between (#lat, lon)
-        lon, lat = lons[len(lons) // 2], lats[len(lats) // 2]
-        dists += [geopy.distance.distance((lat, lon), (qlat, qlon))]
-        qlocs += [(qlat, qlon)]
+#     for feature in response["features"]:
+#         qlon, qlat = feature["geometry"]["coordinates"]
+#         # Distance between (#lat, lon)
+#         lon, lat = lons[len(lons) // 2], lats[len(lats) // 2]
+#         dists += [geopy.distance.distance((lat, lon), (qlat, qlon))]
+#         qlocs += [(qlat, qlon)]
 
-    dists = np.array(dists)
+#     dists = np.array(dists)
 
-    min_dist = np.min(dists)
-    min_dist_idx = np.argmin(dists)
-    min_lat, min_lon = qlocs[min_dist_idx]
+#     min_dist = np.min(dists)
+#     min_dist_idx = np.argmin(dists)
+#     min_lat, min_lon = qlocs[min_dist_idx]
 
-    return (min_lat, min_lon, min_dist)
+#     return (min_lat, min_lon, min_dist)
 
 
 def closest_in_split(flat, flon, split_lats, split_lons):
@@ -230,7 +222,7 @@ def _get_poi_info(query, gpx):
     split_lons = np.reshape(lons, (num_splits, -1))
     split_lats = np.reshape(lats, (num_splits, -1))
 
-    bbox = f"{np.min(lats), np.min(lons), np.max(lats), np.max(lons)}"
+    # bbox = f"{np.min(lats), np.min(lons), np.max(lats), np.max(lons)}"
 
     # Perform query
 
@@ -251,8 +243,8 @@ def _get_poi_info(query, gpx):
                 response2 = api2.query(f"way({feature_id});(._;>;);out body;")
                 qlat = float(response2.ways[0].nodes[0].lat)
                 qlon = float(response2.ways[0].nodes[0].lon)
-            except:
-                print("Failed to parse feature.")
+            except Exception as err:
+                print(f"Failed to parse feature: {err}")
                 continue
         else:
             qlon, qlat = feature["geometry"]["coordinates"]
@@ -299,13 +291,14 @@ def map_handler(switch_values, route_map, gpx_input):
         # No switches turned on
         return display_gpx_on_map(gpx_input)
 
+    info = pn.state.notifications.info("Loading.")
     if switch_values[0]:
         # Water switch turned on
         query = f"""(
         node["amenity"="drinking_water"]{bbox};
         way["amenity"="drinking_water"]{bbox};
         )"""
-
+        
         route_map = display_pois_on_map(query, "water", route_map, gpx)
 
     if switch_values[1]:
@@ -348,10 +341,8 @@ def map_handler(switch_values, route_map, gpx_input):
         )"""
 
         route_map = display_pois_on_map(query, "rmk", route_map, gpx)
-
-    if switch_values[4]:
-        pass
-
+    
+    info.destroy()
     return route_map
 
 
@@ -363,7 +354,6 @@ switch_names = pn.Column(
     pn.widgets.StaticText(name="", value="Fuel station"),
     pn.widgets.StaticText(name="", value="Convenience store"),
     pn.widgets.StaticText(name="", value="RMK huts"),
-    pn.widgets.StaticText(name="", value="Placeholder"),
 )
 
 route_map = pn.bind(display_gpx_on_map, gpx_input)
